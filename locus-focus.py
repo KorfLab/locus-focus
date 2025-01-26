@@ -22,8 +22,8 @@ parser.add_argument('--delay', type=float, default=0.5,
 arg = parser.parse_args()
 
 zfile = f'{arg.locus}-{arg.clade}.zip'
-if not os.path.exists:
-	os.system(f'datasets download gene symbol {arg.locus} --ortholog all')
+if not os.path.exists(zfile):
+	os.system(f'datasets download gene symbol {arg.locus} --ortholog {arg.clade}')
 	os.system(f'mv ncbi_dataset.zip {zfile}')
 
 with ZipFile(zfile) as zfp:
