@@ -1,5 +1,5 @@
-FMR1
-====
+Locus-Focus
+===========
 
 ## Setup ##
 
