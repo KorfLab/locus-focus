@@ -47,6 +47,8 @@ parser.add_argument('locus', help='json file' )
 parser.add_argument('outdir', help='output directory')
 parser.add_argument('--clade', default='all',
 	help='specifcy clade [%(default)s]')
+parser.add_argument('--padding', type=int, default=1000,
+	help='exta sequence upstream and downstream [%(default)i]')
 parser.add_argument('--delay', type=float, default=0.5,
 	help='delay between requests to prevent denial of service')
 arg = parser.parse_args()
@@ -57,8 +59,7 @@ arg = parser.parse_args()
 
 zfile = f'{arg.locus}-{arg.clade}.zip'
 if not os.path.exists(zfile):
-	os.system(f'datasets download gene symbol {arg.locus} --ortholog {arg.clade}')
-	os.system(f'mv ncbi_dataset.zip {zfile}')
+	os.system(f'datasets download gene symbol {arg.locus} --ortholog {arg.clade} --filename {zfile}')
 
 ###########
 # Process #
@@ -66,10 +67,12 @@ if not os.path.exists(zfile):
 
 data = {}
 with ZipFile(zfile) as zfp:
+
 	# genomic locations
 	with zfp.open('ncbi_dataset/data/data_report.jsonl') as fp:
 		for record in fp:
 			d = json.loads(record)
+			#print(json.dumps(d, indent=2))
 			if 'annotations' not in d: continue
 
 			taxid = d['taxId']
@@ -81,16 +84,20 @@ with ZipFile(zfile) as zfp:
 				if len(locs) != 1: sys.exit('unexpected multiple loci')
 				loc = locs[0]
 				ass = ann['assemblyAccession']
-				beg = loc['genomicRange']['begin']
-				end = loc['genomicRange']['end']
+				beg = int(loc['genomicRange']['begin'])
+				end = int(loc['genomicRange']['end'])
 				ori = loc['genomicRange']['orientation']
 				acc = loc['genomicAccessionVersion']
+				chm = loc['sequenceName'] if 'sequenceName' in loc else None
 
 				# save
 				if taxname not in data:
 					data[taxname] = {
 						'taxid': taxid,
 						'common': common,
+						'assembly': ass,
+						'acc': acc,
+						'chrom': chm,
 						'loci': set(),
 						'proteins': set(),
 						'rnas': set(),
@@ -114,4 +121,19 @@ for taxname, record in data.items():
 	data[taxname]['proteins'] = prots
 	data[taxname]['rnas'] = rnas
 
-print(json.dumps(data, indent=2))
+# download genome packages for each locus
+os.system(f'mkdir -p {arg.outdir}')
+for taxname, record in data.items():
+	pkg = f'{arg.outdir}/{taxid}.zip'
+	if os.path.exists(pkg): continue
+	print(json.dumps(record, indent=2))
+	taxid = record['taxid']
+	chm = record['chrom']
+	beg = record['loci'][0]['beg'] - arg.padding
+	end = record['loci'][0]['end'] + arg.padding
+	location = f'--chromosomes {chm}:{beg}-{end}'
+	print(f'downloding {taxid}', file=sys.stderr, flush=True)
+	os.system(f'datasets download genome taxon {taxid} {location} --filename {pkg} --include rna,gff3')
+	sys.exit()
+	time.sleep(arg.delay)
+
